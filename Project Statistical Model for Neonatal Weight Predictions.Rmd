@@ -1,0 +1,477 @@
+---
+title: "Project Statistical Model"
+author: "Tommaso Ruzza"
+date: "2025-03-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1) Data Loading
+
+```{r}
+setwd("C:/Users/tomma/Desktop")
+
+data <- read.csv("neonati.csv", stringsAsFactors = T)
+
+```
+
+```{r}
+library(ggplot2)
+library(tidyr)
+suppressPackageStartupMessages(library(dplyr))
+library(patchwork)
+library(e1071)
+```
+
+## 2) Dataset
+
+The data come from 3 Hospitals and concern 2500 Newborns. The Dataset contains 10 variables reported below:
+
+- Age of the Mother: continuous quantitative variable
+
+- Number of sustained Pregnancies: discrete quantitative variable
+
+- Smoking Mother (0=NO, YES=1): dummy variable
+
+- Number of Weeks of Gestation: continuous quantitative variable
+
+- Weight in grams of the Newborn: continuous quantitative variable
+
+- Length in mm of the Newborn: continuous quantitative variable
+
+- Diameter in mm of the Newborn's Skull: continuous quantitative variable
+
+- Type of Birth: qualitative variable on a nominal scale
+
+- Hospital: qualitative variable on a nominal scale
+
+- Sex of the Newborn: qualitative variable on a nominal scale
+
+The aim of the study is to evaluate whether it is possible to predict the Weight of the newborn at Birth considering above all the relationship with the Mother's variables, to understand whether or not these have a significant effect.
+
+```{r}
+
+attach(data)
+summary(data)
+```
+
+Here you can see the main data of the variables present in the dataset. However, this is not enough for me. I want an analysis of the statistical indices of the quantitative and qualitative variables.
+
+```{r}
+
+data <- data[Anni.madre > 10,] #outlier adjustment
+n <- nrow(data)
+```
+
+```{r}
+p1 <- ggplot(data, aes(x = Anni.madre)) +
+    geom_histogram(binwidth = 1, fill = "lightblue", col = 1, lwd = 0.15) +
+    scale_x_continuous(breaks = seq(10, max(data$Anni.madre, na.rm = TRUE), 5)) +
+    scale_y_continuous(breaks = seq(0, 200, 25)) +
+    labs(x = "Age of the Mother", y = "N. of Mothers") +
+    theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p2 <- ggplot(data, aes(x = factor(N.gravidanze))) +
+    geom_bar(fill = "lightblue", col = 1) +
+    scale_y_continuous(breaks = seq(200, 1000, 200)) +
+    labs(x = "Number of sustained Pregnancies", y = "N. of Mothers") +
+    theme_bw()
+
+p3 <- ggplot(data, aes(x = factor(Fumatrici))) +
+    geom_bar(fill = "lightblue", col = 1) +
+    scale_x_discrete(labels = c("No", "Yes")) +
+    labs(x = "Smoking Mother", y = "N. of Mothers") +
+    theme_bw()
+
+p4 <- ggplot(data, aes(x = Gestazione)) +
+    geom_bar(fill = "lightblue", col = 1) +
+    scale_x_continuous(breaks = seq(min(data$Gestazione, na.rm = TRUE), max(data$Gestazione, na.rm = TRUE), 2)) +
+    scale_y_continuous(breaks = seq(0, 700, 100)) +
+    labs(x = "Number of Weeks of Gestation", y = "N. of Mothers") +
+    theme_bw()
+
+p5 <- ggplot(data, aes(x = Peso)) +
+    geom_density(fill = "lightblue") +
+    geom_vline(xintercept = median(data$Peso, na.rm = TRUE), col = 2) +
+    scale_x_continuous(breaks = seq(1000, 5000, 500)) +
+    labs(x = "Weight of the Newborn (gr.)", y = "") +
+    theme_bw()
+
+(p1 + p2 + p3 + p4 + p5) +
+    plot_layout(ncol = 2, guides = "collect") +
+    plot_annotation(title = "Dataset Variables", tag_levels = "I", tag_suffix = ")")
+```
+
+```{r}
+p6 <- ggplot()+
+    geom_density(aes(x = Lunghezza),
+                 fill = "lightblue")+
+    geom_vline(xintercept = median(Lunghezza), col = 2)+
+    geom_label(aes(x = median(Lunghezza),
+                   y = .5 * max(density(Lunghezza)$y),
+                   label = median(Lunghezza)))+
+    scale_x_continuous(breaks = seq(300,550,50))+
+    scale_y_continuous(breaks = NULL)+
+    labs(x = "Lenght of the Newborn (mm)",
+         y = "")+
+    theme_bw()
+
+p7 <- ggplot()+
+    geom_density(aes(x = Cranio),
+                 fill = "lightblue")+
+    geom_vline(xintercept = median(Cranio), col = 2)+
+    geom_label(aes(x = median(Cranio),
+                   y = .5 * max(density(Cranio)$y),
+                   label = median(Cranio)))+
+    scale_x_continuous(breaks = seq(250, 375, 25))+
+    scale_y_continuous(breaks = NULL)+
+    labs(x = "Diameter of the Skull (mm)",
+         y = "")+
+    theme_bw()
+
+p8 <- ggplot()+
+    geom_bar(aes(x = Tipo.parto),
+             fill = "lightblue",
+             col = 1)+
+    scale_x_discrete(labels = c("Ces" = "Cesarean", "Nat" = "Normal"))+
+    labs(x = "Type of Birth",
+         y = "N.of Births")+
+    theme_bw()
+
+p9 <- ggplot()+
+    geom_bar(aes(x = Ospedale),
+             col = 1,
+             fill = "lightblue")+
+    scale_x_discrete(labels = c("osp1" = "Hospital1", "osp2" = "Hospital2", "osp3" = "Hospital3"))+
+    labs(x = "Hospital",
+         y = "N.of Births")+
+    theme_bw()
+
+p10 <- ggplot()+
+    geom_bar(aes(x = Sesso),
+             col = 1,
+             fill = c("pink", "deepskyblue"))+
+    labs(x = "Sex of the Newborn",
+         y = "N. of newborns")+
+    theme_bw()
+
+(p6 + p7 + p8 + p9 + p10) +
+    plot_layout(ncol = 2, guides = "collect") +
+    plot_annotation(title = "Dataset Variables", tag_levels = "I", tag_suffix = ")")
+```
+
+```{r}
+indici.statistici <- function(x){
+    
+    indici_posizione <- summary(x)
+    
+    
+    indici_dispersione <- c("Intervallo" = max(x, na.rm = TRUE) - min(x, na.rm = TRUE),
+                            "IQR" = IQR(x, na.rm = TRUE),
+                            "dev.st" = sd(x, na.rm = TRUE),
+                            "var" = var(x, na.rm = TRUE),
+                            "CV" = sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE) * 100)
+    
+    
+    indici_forma <- c("Asimmetria" = moments::skewness(x, na.rm = TRUE),
+                      "Curtosi" = moments::kurtosis(x, na.rm = TRUE) - 3)
+    
+    
+    indici <- c(indici_posizione, indici_dispersione, indici_forma)
+    return(indici)
+}
+
+qualitative_vars <- c("Fumatrici", "Tipo.parto", "Ospedale", "Sesso")
+quantitative_vars <- names(data)[!(names(data) %in% qualitative_vars)]
+
+indici_statistici_df <- data.frame()
+
+for (x in quantitative_vars) {
+    
+    idx <- indici.statistici(data[[x]])
+    
+    df_idx <- data.frame(Indice = names(idx), Valore = round(idx, 2), Variabile = x)
+    
+    indici_statistici_df <- rbind(indici_statistici_df, df_idx)
+}
+
+write.csv(indici_statistici_df, "indici_statistici.csv", row.names = FALSE)
+
+freq_tables_list <- list()
+
+for (x in qualitative_vars) {
+    
+    freq_table <- table(data[[x]])
+    
+    df_freq <- as.data.frame(freq_table)
+    df_freq$Variabile <- x
+    
+    freq_tables_list[[x]] <- df_freq
+}
+
+final_freq_tables <- do.call(rbind, freq_tables_list)
+
+write.csv(final_freq_tables, "frequenze_qualitative.csv", row.names = FALSE)
+
+View(indici_statistici_df)
+View(final_freq_tables)
+
+print(indici_statistici_df)
+print(final_freq_tables)
+```
+
+Here the graphs related to each variable are shown. 
+We can say that the most of the women examined are between 20 and 30 years old. Most of the woman have no previous pregnancies. 95% of the women examined are non-smokers. The number of weeks of gestation ranges from 25 to 43 with an average of about 39 weeks. The babies born have an average weight of about 3.3kg with a maximum of 4.9kg and minimum of 0.830kg. 
+
+
+## 3) Hypothesis
+
+On average, the Weight and Height in the newborn population in Italy are 3.3kg and 50cm respectively. 
+(source: https://www.ospedalebambinogesu.it/da-0-a-30-giorni-come-si-presenta-e-come-cresce-80012/#:~:text=In%20media%20il%20peso%20nascita,pari%20mediamente%20a%2050%20centimetri)
+
+```{r}
+
+t.test(Peso, mu = 3300, conf.level = 0.95, alternative = "two.sided")
+t.test(Lunghezza, mu = 500, conf.level = 0.95, alternative = "two.sided")
+```
+
+In the first case (newborn weight) the p-value is 0.13, so for a significance level of α = 0.05 I do not reject the null hypothesis. I conclude that the length of this sample of newborns is not significantly different from that of the population.
+In the second case (newborn length) the p-value is very small (of the order of 10−16), so I reject the null hypothesis. I conclude that the weight of this sample of newborns is significantly different from that of the population.
+
+```{r}
+
+t.test(Peso ~ Sesso)   
+t.test(Lunghezza ~ Sesso)  
+t.test(Cranio ~ Sesso)  
+
+chisq.test(table(Tipo.parto, Sesso))   
+
+```
+
+I performed independent samples t-tests to verify significant differences between the two sexes, accompanying the numerical tests with boxplots to have a graphical confirmation.
+The differences in weight, length, skull diameter are all significant between the two sexes
+(always considering a significance level of 0.05).
+On the other hand, the type of birth (natural or cesarean) is independent of the sex of the newborn. In this case, since the variable Tipo.parto is qualitative, I calculated the frequency table between the variables involved and perform a chi-square test to test the hypothesis of independence.
+
+```{r}
+tipo_parto_per_ospedale <- table(Ospedale, Tipo.parto)
+prop.test(tipo_parto_per_ospedale)
+chisq.test(tipo_parto_per_ospedale)
+```
+
+I tested another hypothesis: there were rumors that some hospitals perform more cesarean sections, so I took steps to verify it. Since I had to test a proportion, I used prop.test() on the frequency table between the variables involved (I should point out, however, that the chi-square test gives the exact same result).The p-value is very high, so I do not reject the null hypothesis. I conclude that there are no significant differences in the type of birth depending on the hospital.
+
+## 4) Analysis
+
+```{r}
+moments::skewness(Peso)
+moments::kurtosis(Peso) - 3
+shapiro.test(Peso)
+```
+
+First of all, I checked that the response variable (Weight) is approximately normal, by
+looking at the shape indices and performing a Shapiro-Wilk test. I checked this in advance because any deviations from normality of the response variable often also affect the residuals. I noticed that the response variable (Weight) does not follow a normal distribution. In fact, the Shapiro-Wilk test clearly rejects the null hypothesis of normality, and we can note that the distribution is particularly leptokurtic (pointed), with a kurtosis value of 2.03. I know that in this case it would be appropriate to use a GLM, but I try with a linear
+regression model anyway.
+
+```{r}
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
+    
+    r <- abs(cor(x, y))
+    
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)  
+
+     
+    if (missing(cex.cor)) cex.cor <- 0.8 / strwidth(txt)
+    
+    
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+
+
+data_quantitative <- data %>% select(all_of(quantitative_vars))
+
+
+pairs(data_quantitative, upper.panel = panel.smooth, lower.panel = panel.cor)
+
+    
+boxplot(Peso ~ Sesso)
+t.test(Peso ~ Sesso)
+
+boxplot(Peso ~ Fumatrici)
+t.test(Peso ~ Fumatrici)
+
+boxplot(Peso ~ Tipo.parto)
+
+t.test(Peso ~ Tipo.parto)
+
+boxplot(Peso ~ Ospedale)
+pairwise.t.test(Peso, Ospedale, paired = F, pool.sd = T, p.adjust.method = "bonferroni")
+```
+
+I investigated the two-by-two relationships between quantitative variables, both numerically (correlation matrix) and graphically. At first glance, length, skull, gestation appear significant.
+I investigated the relationships between the qualitative variables and the response variable. Only Sex is significant (instead the variable Smokers - which indicates whether a mother is a smoker or not - is not significant, unlike what one might expect, with a p-value of 0.30).
+
+```{r}
+mod1 <- lm(Peso ~ . , data = data)
+summary(mod1)
+BIC(mod1)
+```
+
+The model has R2adj = 0.72, which is a reasonable value. 
+This first model includes 10 variables (9 actually, but for the Hospital factor two are created because it has 3 modes). Some have very high p-values, so they can most likely
+be removed from the model to streamline it without losing a significant amount of explained variance.
+
+```{r}
+stepwise_mod <- MASS::stepAIC(mod1, direction = "both", k = log(n))
+summary(stepwise_mod)
+```
+
+```{r}
+mod2 <- update(mod1, ~.-Anni.madre)
+summary(mod2)
+anova(mod2, mod1)
+BIC(mod2, mod1)
+car::vif(mod2)
+
+mod3 <- update(mod2, ~.-Ospedale)
+summary(mod3)
+BIC(mod3, mod2)
+anova(mod3, mod2)
+
+mod4 <- update(mod3, ~.-Fumatrici)
+summary(mod4)
+BIC(mod4, mod3)
+anova(mod4, mod3)
+```
+
+```{r}
+mod5 <- update(mod4, ~.-Tipo.parto)
+summary(mod5)
+BIC(mod4, mod5)
+anova(mod4, mod5)
+
+mod6 <- update(mod5, ~.-N.gravidanze)
+summary(mod6)
+BIC(mod5, mod6)    
+anova(mod5, mod6)
+
+car::vif(mod5)
+```
+
+```{r}
+mod10 <- update(mod5, ~.+I(Gestazione^2))
+summary(mod10)
+BIC(mod10, mod5)
+anova(mod10, mod5)
+```
+
+Before doing manual tests, I looked at what I got from the function that implements the automatic stepwise procedure - using the BIC criterion (preferable to the AIC as it does not overestimate overparameterized models).
+I noticed that that model includes the variables N.pregnancies, Gestation, Length, Skull,
+Sex. Then I tried to proceed manually step by step.
+In the model with all the variables I noticed that Years.mother has a p-value of 0.43. Removing it, R2adj remains unchanged, the BIC has decreased and the ANOVA test did not indicate a significant difference in explained variance (p-value of 0.43). So I removed it without hesitation.
+The variable Hospital has two p-values (because it is qualitative with 3 modalities) of 0.40 and 0.03. Removing it, R2adj went down not even a single precentage point, BIC went down and the ANOVA test showed a significant difference (p-value of 0.009). But for such a small decrease in R2adj for removing two variables, I chose not to keep it.
+The variable Smokers has a p-value of 0.25. Removing it, R2adj went down only 0.1%, BIC went down and the ANOVA test showed a significant difference (p-value of 0.01). But for such a low decrease in R2adj in the face of removing a variable, I chose not to
+keep it.
+The variable in the model with the highest p-value was N.pregnancies with a p-value of 0.004, I tried to remove it. It turned out that R2 adj decreased by not even one percentage point, but the BIC for the first time increased. The ANOVA test indicated a significant difference from the previous model (p-value of 0.004). Given this, I chose to keep the variable in the model and stop there, because all the other variables have p-values of the order of 10−12 or less.
+I checked that there are no problems of multicollinearity (all VIFs are less than 5 so
+no problem). From the graphs created previously I noted a possible quadratic effect between Gestation and Y. Trying to insert it into the model, I saw that R2 adj only increased by 0.04%, the p-value of Gestation was 0.02 (but that of Gestation went from 0.3% to 11%), the BIC increases and the ANOVA indicated a significant difference between the two models.
+Even if graphically it seems to me that the quadratic effect could be relevant, the numerical tests did not indicate a significant improvement, so I chose not to add it to the model. I chose not to consider interactions between the variables, because thinking about it mentally I do not imagine any relationship that could be significant between the variables in the final model (excluding the anthropometric control variables).
+
+```{r}
+par(mfrow = c(2,2))
+plot(mod5)
+
+shapiro.test(residuals(mod5))
+plot(density(residuals(mod5)))
+ggplot()+
+    geom_density(aes(x = residuals(mod5)))+
+    geom_vline(xintercept = mean(residuals(mod5)), col = 2)+
+    theme_bw()+
+    labs(x = "Residues", y = "")+
+    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+```
+
+I checked, both graphically and numerically, whether the model met all the assumptions about the residuals (normality with mean 0, homoscedasticity, independence).
+In the first graph (which relates the estimates obtained by the model and the respective residuals), most of the points are a random cloud of points around a mean of 0, which would mean everything is normal. The only visible problem is that the left tail deviates upwards
+(i.e., the model underestimates the weight predictions of light newborns).
+In the second graph (which compares the quantiles of Weight with the quantiles of the normal) most of the points in the graph align along the line y = x, indicating that the residuals align along a normal. Again, you can see that the tails have a different pattern than most of the points. In the third graph we see, similarly to the first, mainly a random cloud of points around a value of y (this would indicate a constant variance, respecting the hypothesis of homoscedasticity). Here too, however, the left tail presents the problem of deviating a little upwards.
+In the fourth graph (outliers) only one value exceeds the warning threshold (Cook's distance > 0.5) and none exceeds the alarm threshold of 1, so graphically no problems with outliers are shown.
+The Shapiro-Wilk test clearly rejects the normality of the residuals, but in the Q-Q plot we had predicted a reasonable possibility of normality. It can be seen that the distribution of the residuals resembles a normal one; it is mainly symmetric (with the right tail being particularly long), but it seems decidedly leptokurtic. In fact, the kurtosis, calculated with moments::kurtosis(residuals(mod5)) - 3, is
+4.16, quite high.
+
+```{r}
+lmtest::dwtest(mod5)    
+lmtest::bptest(mod5)   
+```
+
+```{r}
+cook <- cooks.distance(mod5)
+cook[cook > 0.5]    
+```
+
+```{r}
+car::outlierTest(mod5)
+```
+
+```{r}
+lev <- hatvalues(mod5)
+p <- sum(lev)
+soglia <- 2 * p/n
+plot(lev)
+abline(h=soglia,col=2,lwd=2)
+lev[lev > soglia]; length(lev[lev > soglia])
+```
+
+The only value previously identified with Cook's distance > 0.5 is observation 1551.
+Examining it, I see that Length=315 and Weight=4370. Comparing the weight with that of babies of similar length, I get extremely different numbers (around 1000) so it was probably a typing error. Since no other value exceeds the warning threshold, and
+no value reaches the alarm threshold, there is no problem with outliers.
+However, for completeness I examine separately extreme values in the response variable and in the regressor space (outlier values and leverage).
+The outlier Test function of the package "car" returns 3 outliers (observations 1551, 155 and 1306).
+Instead, the manual calculation of leverage values returns 152 values (6% of the total of 2500), which correspond to all observations that are far from the others in the regressor space.
+
+```{r}
+newdata_nat <- data.frame(N.gravidanze=2, Gestazione=39, Lunghezza=mean(Lunghezza), Cranio=mean(Cranio), Tipo.parto=factor("Nat"), Sesso=factor("F"))
+newdata_ces <- data.frame(N.gravidanze=2, Gestazione=39, Lunghezza=mean(Lunghezza), Cranio=mean(Cranio), Tipo.parto=factor("Ces"), Sesso=factor("F"))
+pred1 <- predict(mod5, newdata = newdata_nat)
+pred2 <- predict(mod5, newdata = newdata_ces)
+prediction = 1 / n * (pred1 * dim(data[Tipo.parto == "Nat",])[1]
+                      + pred2 * dim(data[Tipo.parto == "Ces",])[1])
+
+print(paste("Weighted Forecast is:", prediction))
+```
+
+Overall, the model's R2 adj is 0.72, meaning that 72% of the variability of the Weight is explained by the model. There are no alarming outliers. The residuals have a mean of 0 and are not autocorrelated. In light of this, even if there is heteroskedasticity and the Shapiro-Wilk test rejects normality, the model seems good enough to explain the variability of the response variable. I make a prediction for the weight of a newborn baby: the mother is in her third pregnancy (so N. pregnancies will be 2, i.e. the previous ones) and will give birth in the 39th week. No measurements from the ultrasound are available.
+To make a prediction in R I have to pass a data frame with all the variables, even those
+that I don't have. For the quantitative ones (Length, Skull) I can simply use the average of them, while for Birth Type I choose to consider both modalities and make the weighted average.
+The result is a weight of 3261g, perfectly reasonable.
+
+## 4) Visualizations
+
+```{r}
+summary(mod5)
+```
+
+```{r}
+p1 <- ggplot(data, aes(x = Gestazione, y = Peso, col = Sesso)) +
+    geom_point(alpha = 0.5, position = "jitter") +   
+    geom_smooth(method = "lm", se = FALSE, lwd = 1.5) +  
+    labs(x = "Weeks of Gestation", y = "Weight of the Newborn (gr.)", title = "Link between Gestation and Weight") +
+    theme_bw() +  
+    theme(plot.title = element_text(size = 14),  
+          plot.margin = margin(1, 1, 2, 1))  
+
+p2 <- ggplot(data, aes(x = as.factor(N.gravidanze), y = Peso)) +
+    geom_boxplot() +
+    geom_smooth(aes(x = as.numeric(N.gravidanze), y = Peso), method = "lm", se = FALSE, lwd = 1.25) +
+    labs(x = "N. of sustained pregnancies", y = "Weight of the Newborn (gr)", title = "Weight based on Pregnancy") +
+    theme_bw() +
+    theme(plot.title = element_text(size = 14), 
+          plot.margin = margin(1, 1, 2, 1))
+
+
+p1 + p2
+```
